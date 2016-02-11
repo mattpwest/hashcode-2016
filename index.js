@@ -19,17 +19,28 @@ var line = lineToItems(contentLines[lineNo++]);
 //// Basic map information
 var rows = parseInt(line[0]);
 var cols = parseInt(line[1]);
-var drones = parseInt(line[2]);
+var droneCount = parseInt(line[2]);
 var deadline = parseInt(line[3]);
 var maxLoad = parseInt(line[4]);
 //console.log(rows, cols, drones, deadline, maxLoad);
+
+//// Drones
+var drones = [];
+
+for (var i = 0; i < numProducts; i++) {
+	var drone = {
+		timeBusy: 0,
+		product: -1,
+		productCount: 0
+	};
+}
 
 //// Weights
 var numProducts = parseInt(contentLines[lineNo++]);
 
 line = lineToItems(contentLines[lineNo++]);
 var productWeights = [];
-for (var i = 0; i < numProducts; i++) {
+for (i = 0; i < numProducts; i++) {
 	productWeights[i] = parseInt(line[i]);
 }
 
@@ -86,11 +97,21 @@ console.log(orders[orders.length - 1]);
 var commands = [];
 var commandCount = 0;
 
-cmdLoad(1, 1, 1, 1);
-cmdUnload(1, 1, 1, 1);
-cmdLoad(1, 1, 1, 1);
-cmdDeliver(1, 1, 1, 1);
-cmdWait(1, 2);
+
+//// Sort orders descending by number of items required
+var prioritizedOrders = orders.sort(compareOrderByProductCountAsc);
+
+
+var turn = 0;
+/*while (turn < deadline) {
+
+
+	turn++;
+}*/
+
+
+
+
 
 // Write output
 var outputContent = commands.length + '\n';
@@ -139,4 +160,8 @@ function cmdDeliver(droneId, customerId, productType, productCount) {
 
 function cmdWait(droneId, turns) {
 	commands[commandCount++] = droneId + ' ' + 'W' + ' ' + turns;
+}
+
+function compareOrderByProductCountAsc(orderA, orderB) {
+	return orderA.products.length - orderB.products.length;
 }
