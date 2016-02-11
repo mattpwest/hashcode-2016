@@ -83,10 +83,26 @@ console.log(orders[0]);
 console.log(orders[orders.length - 1]);
 
 // Process
+var commands = [];
+var commandCount = 0;
 
+cmdLoad(1, 1, 1, 1);
+cmdUnload(1, 1, 1, 1);
+cmdLoad(1, 1, 1, 1);
+cmdDeliver(1, 1, 1, 1);
+cmdWait(1, 2);
 
 // Write output
-fs.writeFileSync(filenameOut, content);
+var outputContent = commands.length + '\n';
+for (i = 0; i < commands.length; i++) {
+	outputContent += commands[i] + '\n';
+}
+fs.writeFileSync(filenameOut, outputContent);
+
+
+
+
+
 
 function inputToLines(content) {
 	var result = [];
@@ -107,4 +123,20 @@ function inputToLines(content) {
 
 function lineToItems(line) {
 	return line.split(' ');
+}
+
+function cmdLoad(droneId, warehouseId, productType, productCount) {
+	commands[commandCount++] = droneId + ' ' +'L' + ' ' + warehouseId + ' ' + productType + ' ' + productCount;
+}
+
+function cmdUnload(droneId, warehouseId, productType, productCount) {
+	commands[commandCount++] = droneId + ' ' +'U' + ' ' + warehouseId + ' ' + productType + ' ' + productCount;
+}
+
+function cmdDeliver(droneId, customerId, productType, productCount) {
+	commands[commandCount++] = droneId + ' ' +'D' + ' ' + customerId + ' ' + productType + ' ' + productCount;
+}
+
+function cmdWait(droneId, turns) {
+	commands[commandCount++] = droneId + ' ' + 'W' + ' ' + turns;
 }
