@@ -27,12 +27,18 @@ var maxLoad = parseInt(line[4]);
 //// Drones
 var drones = [];
 
-for (var i = 0; i < numProducts; i++) {
+for (var i = 0; i < droneCount; i++) {
 	var drone = {
+		x: 0,
+		y: 0,
+		mode: 'idle',
 		timeBusy: 0,
 		product: -1,
-		productCount: 0
+		productCount: 0,
+		targets: []
 	};
+
+	drones[i] = drone;
 }
 
 //// Weights
@@ -76,15 +82,18 @@ var orders = [];
 for (i = 0; i < numOrders; i++) {
 	line = lineToItems(contentLines[lineNo++]);
 	var order = {
+		id: i,
 		x: parseInt(line[0]),
 		y: parseInt(line[1]),
-		products: []
+		productsWanted: [],
+		productsEnRoute: [],
+		productsDelivered: []
 	};
 
 	lineNo++; // Skip the number of items line
 	line = lineToItems(contentLines[lineNo++]);
 	for (var j = 0; j < line.length; j++) {
-		order.products[j] = parseInt(line[j]);
+		order.productsWanted[j] = parseInt(line[j]);
 	}
 
 	orders[i] = order;
@@ -101,13 +110,110 @@ var commandCount = 0;
 //// Sort orders descending by number of items required
 var prioritizedOrders = orders.sort(compareOrderByProductCountAsc);
 
-
 var turn = 0;
-/*while (turn < deadline) {
+while (turn < deadline) {
 
+	if (turn % 1000 === 0) {
+		console.log('Turn: ', turn);
+	}
+
+	for (i = 0; i < droneCount; i++) {
+		drone = drones[i];
+
+		updateDrone(i);
+
+		//console.log('droneId: ', i);
+
+		if (drone.mode === 'idle' && drone.targets.length === 0) {
+			// Find the first needed product...
+			var nextProduct = -1;
+			var orderIt = 0;
+			loop1:
+			while (nextProduct < 0 && orderIt < prioritizedOrders.length) {
+				order = prioritizedOrders[orderIt++];
+				if (order.productsWanted.length > 0) {
+					nextProduct = order.productsWanted[0];
+					break loop1;
+				}
+			}
+
+			console.log('\ttarget product: ', nextProduct);
+
+			// How many can we carry...
+			var canCarry = Math.floor(maxLoad / productWeights[nextProduct]);
+
+			console.log('\tcanCarry: ', canCarry);
+
+			// Where can we find max(maxCarry, available)...
+			var targetWarehouse = -1;
+			var maxFound = 0;
+			for (j = 0; j < warehouses.length; j++) {
+				warehouse = warehouses[j];
+
+				if (warehouse.products[nextProduct] > maxFound) {
+					maxFound = warehouse.products[nextProduct];
+					targetWarehouse = j;
+				}
+			}
+
+			var toLoad = Math.min(maxFound, canCarry);
+			console.log('\ttargetWarehouse: ', targetWarehouse);
+			console.log('\tnumberToLoad: ', toLoad);
+
+			// Issue load command to that warehouse, reduce number of that item at the warehouse...
+			console.log('\ttargetWarehouse.productBefore: ', warehouses[targetWarehouse].products[nextProduct]);
+			if (targetWarehouse >= 0 && toLoad > 0) {
+				console.log('\t\tLOAD');
+				cmdLoad(i, targetWarehouse, nextProduct, toLoad);
+			}
+			console.log('\ttargetWarehouse.productAfter: ',  warehouses[targetWarehouse].products[nextProduct]);
+
+			// Find first N customers that need that item and set them as the drone targets
+			var targets = [];
+			var available = drone.productCount;
+			orderIt--;
+			while (available > 0 && orderIt < prioritizedOrders.length) {
+				order = prioritizedOrders[orderIt++];
+
+				var found = false;
+				for (var j = 0; j < order.productsWanted.length; j++) {
+					if (order.productsWanted[j] === nextProduct) {
+						available--;
+
+						order.productsWanted.splice(order.productsWanted.indexOf(nextProduct), 1);
+						order.productsEnRoute.push(nextProduct);
+
+						found = true;
+					}
+				}
+
+				if (found) {
+					targets.push(order.id);
+				}
+			}
+
+			drone.targets = targets;
+		} else if (drone.mode === 'idle' && drone.targets.length > 0) {
+			var order = orders[drone.targets[0]];
+			var count = 0;
+			for (j = 0; j < order.productsEnRoute.length; j++) {
+				console.log('DroneId: ', i);
+				console.log('DroneProduct: ', drone.product);
+				console.log('ProductsEnRoute: ', order.productsEnRoute);
+				console.log('');
+				if (order.productsEnRoute[j] === drone.product) {
+					count++;
+				}
+			}
+
+			cmdDeliver(i, order.id, drone.product, count);
+
+			drone.targets.splice(0, 1);
+		}
+	}
 
 	turn++;
-}*/
+}
 
 
 
@@ -147,7 +253,18 @@ function lineToItems(line) {
 }
 
 function cmdLoad(droneId, warehouseId, productType, productCount) {
+	var drone = drones[droneId];
+	var warehouse = warehouses[warehouseId];
+
 	commands[commandCount++] = droneId + ' ' +'L' + ' ' + warehouseId + ' ' + productType + ' ' + productCount;
+
+	drone.mode = 'load';
+	drone.timeBusy = calcTimeForDistance(drone.x, drone.y, warehouse.x, warehouse.y) + 1; // +1 for loading time
+	drone.x = warehouse.x;
+	drone.y = warehouse.y; // By the time we care again this will be the drone's location
+	drone.product = productType;
+	drone.productCount = productCount;
+	warehouse.products[productType] -= productCount;
 }
 
 function cmdUnload(droneId, warehouseId, productType, productCount) {
@@ -155,13 +272,58 @@ function cmdUnload(droneId, warehouseId, productType, productCount) {
 }
 
 function cmdDeliver(droneId, customerId, productType, productCount) {
+	var drone = drones[droneId];
+	var order = orders[customerId];
+
 	commands[commandCount++] = droneId + ' ' +'D' + ' ' + customerId + ' ' + productType + ' ' + productCount;
+
+	drone.mode = 'deliver';
+	drone.timeBusy = calcTimeForDistance(drone.x, drone.y, order.x, order.y) + 1; // +1 for loading time
+	drone.x = order.x;
+	drone.y = order.y; // By the time we care again this will be the drone's location
+	drone.productCount -= productCount;
 }
 
 function cmdWait(droneId, turns) {
 	commands[commandCount++] = droneId + ' ' + 'W' + ' ' + turns;
 }
 
+function updateDrone(droneId) {
+	var drone = drones[droneId];
+
+	console.log('Update drone ', droneId);
+	console.log('\tmode: ', drone.mode);
+	console.log('\tbusy: ', drone.timeBusy);
+
+	if (drone.timeBusy > 1) {
+		drone.timeBusy--;
+	} else if (drone.timeBusy == 1) {
+		drone.timeBusy--;
+
+		// Load or fulfill orders
+		if (drone.mode == 'load') {
+			// Nothing to do - we preloaded it on issuing the command
+		} else if (drone.mode == 'deliver') {
+			// var order = orders[drone.targets[0]];
+			// while (drone.productCount > 0) {
+			// 	order.productsEnRoute.splice(order.productsEnRoute.indexOf(drone.product));
+			// 	order.productsDelivered.push(drone.product);
+			// 	drone.product
+			// }
+		}
+
+		// Reset
+		drone.mode = 'idle';
+	}
+}
+
 function compareOrderByProductCountAsc(orderA, orderB) {
-	return orderA.products.length - orderB.products.length;
+	return orderA.productsWanted.length - orderB.productsWanted.length;
+}
+
+function calcTimeForDistance(x1, y1, x2, y2) {
+	var x = x1 - x2;
+	var y = y1 - y2;
+
+	return Math.ceil(Math.sqrt(x * x + y * y));
 }
